@@ -1,19 +1,37 @@
 # Daily AI/DS Digest
 
-Sends you a daily email with one "Story of the Day" (3-4 sentences) plus 5-7 other
-AI/data-science updates — all sourced from official AI lab blogs, arXiv, mainstream
-tech journalism, and Hacker News, restricted to items from the last 48 hours.
+A daily email digest of AI and data-science news, built as an automated pipeline
+(fetch → dedupe → summarize → validate → email) that runs on a schedule via
+GitHub Actions. No server to maintain — GitHub runs it for free.
+
+Each email has four sections:
+
+- **Story of the Day** — the single most significant item, 3-4 sentences.
+- **AI Tools** — new products, features, and model releases from official lab blogs.
+- **What's the News** — industry, market, and policy stories.
+- **Research** — the most consequential arXiv papers, translated into plain English.
+
+Sourced from a fixed allowlist of official AI lab blogs, arXiv, mainstream tech
+journalism, and Hacker News — restricted to items published in the last 48 hours.
 
 ## How it stays reliable and hallucination-free
 
 - **Fixed source allowlist** — no random blogs, no Medium, no low-quality aggregators.
 - **48-hour freshness filter** — enforced in code before anything reaches the LLM.
+- **Per-source cap** — no single high-volume feed (arXiv posts 100+ papers/day) can
+  flood the catalog and crowd out everything else.
 - **Grounded summarization** — Gemini is only allowed to summarize the text it's given,
   with an explicit instruction not to use outside knowledge.
 - **Link validation** — after Gemini responds, the script checks every link it cited
   against the actual fetched articles. Any link that doesn't match exactly is dropped.
+- **No repeats** — every surfaced article is logged and skipped on future runs (14-day
+  memory); duplicate links within the same email are also filtered out.
 - **Honest fallback** — if too few good items are found, the email says so instead of
   padding with filler.
+
+This is an automated LLM *pipeline*, not an autonomous agent — Gemini is called
+exactly once per run, purely to summarize a list of articles the script already
+fetched. It never decides what to fetch or loops on its own.
 
 ## One-time setup
 
@@ -25,10 +43,12 @@ Your normal Gmail password won't work for SMTP. You need an "App Password":
 
 ### 2. Get a free Gemini API key
 1. Go to https://aistudio.google.com/apikey
-2. Create an API key (free tier is generous — plenty for one summarization call/day).
+2. Create an API key. The free tier allows 5 requests/minute — plenty for one
+   summarization call/day (the script also retries automatically on rate limits).
 
 ### 3. Create a GitHub repo
-Push this folder to a new **private** GitHub repository.
+Push this folder to a new GitHub repository (private or public — no secrets live
+in the code, they're all stored as encrypted GitHub Actions secrets).
 
 ### 4. Add repo secrets
 In your repo: Settings → Secrets and variables → Actions → New repository secret.
@@ -48,12 +68,13 @@ click "Enable workflow" if prompted.
 ### 6. Test it manually
 Actions tab → "Daily AI Digest" → "Run workflow" button → run it once to confirm
 you get an email. Check the run logs if something fails — they'll tell you exactly
-which step broke.
+which step broke. (Use "Run workflow" for a fresh attempt, not "Re-run" — re-running
+replays against the old commit it originally ran on.)
 
 ### 7. Adjust the send time (optional)
 Edit the cron line in `.github/workflows/daily-digest.yml`:
 ```yaml
-- cron: '0 13 * * *'  # minute hour day month weekday, all in UTC
+- cron: '30 4 * * *'  # minute hour day month weekday, all in UTC
 ```
 Use https://crontab.guru to convert your local time zone to UTC.
 
@@ -72,8 +93,10 @@ python daily_digest.py
 
 ## Customizing sources
 
-Edit the `RSS_SOURCES` dictionary at the top of `daily_digest.py` to add or remove
-feeds. Any source with a valid RSS/Atom feed works — just make sure it's something
+Edit the `RSS_SOURCES` dictionary near the top of `daily_digest.py` to add or remove
+feeds. Each entry is `"Name": ("category", "feed-url")`, where category is `"tools"`,
+`"research"`, or `"news"` — this determines which email section the item can appear
+in. Any source with a valid RSS/Atom feed works — just make sure it's something
 you'd actually trust.
 
 ## Files
