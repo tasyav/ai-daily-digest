@@ -11,6 +11,7 @@ and emails the result via Gmail SMTP.
 
 import os
 import json
+import time
 import smtplib
 import feedparser
 import requests
@@ -18,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 
 # ---------------------------------------------------------------------------
 # CONFIG
@@ -256,8 +258,20 @@ def summarize_with_gemini(items):
         generation_config={"temperature": 0.15, "response_mime_type": "application/json"},
     )
     prompt = build_prompt(items)
-    response = model.generate_content(prompt)
-    return json.loads(response.text)
+
+    # The free tier caps requests per minute, so a burst of runs (or shared
+    # project usage) can 429 a single call. Back off and retry before giving up.
+    last_exc = None
+    for attempt in range(1, 4):
+        try:
+            response = model.generate_content(prompt)
+            return json.loads(response.text)
+        except google_exceptions.ResourceExhausted as e:
+            last_exc = e
+            wait = 70 * attempt
+            print(f"[warn] Gemini rate limit hit (attempt {attempt}/3), retrying in {wait}s...")
+            time.sleep(wait)
+    raise last_exc
 
 
 def validate_against_catalog(result, items):
