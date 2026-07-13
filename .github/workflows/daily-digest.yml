@@ -2,9 +2,9 @@ name: Daily AI Digest
 
 on:
   schedule:
-    # Runs at 13:00 UTC every day — adjust to your preferred send time.
+    # Runs at 04:30 UTC every day = 10:00 AM IST (UTC+5:30).
     # Use https://crontab.guru to convert your local time to UTC.
-    - cron: '0 13 * * *'
+    - cron: '30 4 * * *'
   workflow_dispatch: {}  # lets you trigger a run manually from the Actions tab
 
 permissions:

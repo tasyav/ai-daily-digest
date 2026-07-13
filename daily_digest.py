@@ -269,11 +269,24 @@ def validate_against_catalog(result, items):
         print(f"[warn] Story of the day link not found in catalog, dropping: {sod.get('link')}")
         result["story_of_the_day"] = None
 
+    # Track links already used in this email so no story appears twice,
+    # in any section or as a repeat of the story of the day.
+    used_links = set()
+    if result.get("story_of_the_day"):
+        used_links.add(result["story_of_the_day"]["link"])
+
     for section in ("ai_tools", "research", "the_news"):
-        filtered = [u for u in result.get(section, []) if u.get("link") in valid_links]
-        dropped = len(result.get(section, [])) - len(filtered)
-        if dropped:
-            print(f"[warn] Dropped {dropped} '{section}' item(s) with unverifiable links.")
+        filtered = []
+        for u in result.get(section, []):
+            link = u.get("link")
+            if link not in valid_links:
+                print(f"[warn] Dropped '{section}' item with unverifiable link: {link}")
+                continue
+            if link in used_links:
+                print(f"[warn] Dropped '{section}' item duplicated within this email: {link}")
+                continue
+            used_links.add(link)
+            filtered.append(u)
         result[section] = filtered
     return result
 
