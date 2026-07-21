@@ -259,17 +259,29 @@ def summarize_with_gemini(items):
     )
     prompt = build_prompt(items)
 
-    # The free tier caps requests per minute, so a burst of runs (or shared
-    # project usage) can 429 a single call. Back off and retry before giving up.
+    # Transient failures happen: free-tier rate limits (429) or Gemini itself
+    # being temporarily overloaded (503/504). Give each attempt a short deadline
+    # (the client library otherwise retries internally for up to 600s on its own,
+    # which is what turned one bad call into a 10-minute hang) and control the
+    # backoff ourselves.
+    transient_errors = (
+        google_exceptions.ResourceExhausted,
+        google_exceptions.ServiceUnavailable,
+        google_exceptions.DeadlineExceeded,
+        google_exceptions.InternalServerError,
+    )
     last_exc = None
     for attempt in range(1, 4):
         try:
-            response = model.generate_content(prompt)
+            response = model.generate_content(
+                prompt, request_options={"timeout": 60}
+            )
             return json.loads(response.text)
-        except google_exceptions.ResourceExhausted as e:
+        except transient_errors as e:
             last_exc = e
             wait = 70 * attempt
-            print(f"[warn] Gemini rate limit hit (attempt {attempt}/3), retrying in {wait}s...")
+            print(f"[warn] Gemini call failed ({type(e).__name__}), attempt {attempt}/3, "
+                  f"retrying in {wait}s...")
             time.sleep(wait)
     raise last_exc
 
